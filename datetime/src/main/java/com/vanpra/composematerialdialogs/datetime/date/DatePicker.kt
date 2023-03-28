@@ -331,7 +331,8 @@ private fun CalendarView(
                 }
                 val date = viewDate.withDayOfMonth(it)
                 val enabled = allowedDateValidator(date)
-                DateSelectionBox(it, selected, state.colors, enabled) {
+                val today = LocalDate.now().atStartOfDay() == date.atStartOfDay()
+                DateSelectionBox(it, selected, today, state.colors, enabled) {
                     state.selected = date
                 }
             }
@@ -343,6 +344,7 @@ private fun CalendarView(
 private fun DateSelectionBox(
     date: Int,
     selected: Boolean,
+    today: Boolean,
     colors: DatePickerColors,
     enabled: Boolean,
     onClick: () -> Unit
@@ -363,7 +365,12 @@ private fun DateSelectionBox(
             modifier = Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(colors.dateBackgroundColor(selected).value)
+                .background(
+                    if (today && !selected)
+                        colors.dateBackgroundColor(true).value.copy(alpha = ContentAlpha.disabled)
+                    else
+                        colors.dateBackgroundColor(selected).value
+                )
                 .wrapContentSize(Alignment.Center)
                 .alpha(if (enabled) ContentAlpha.high else ContentAlpha.disabled),
             style = TextStyle(
