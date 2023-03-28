@@ -53,7 +53,3 @@ android {
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
 }
-
-shot {
-    tolerance = 1.0 // Tolerance needed for CI
-}

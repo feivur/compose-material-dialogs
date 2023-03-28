@@ -1,7 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("com.diffplug.spotless") version "6.11.0"
     id("org.jetbrains.dokka") version "1.7.10"
 }
 
@@ -14,10 +13,8 @@ buildscript {
 
     dependencies {
         classpath(Dependencies.Kotlin.gradlePlugin)
-        classpath("com.android.tools.build:gradle:8.0.0-alpha04")
-        classpath("com.vanniktech:gradle-maven-publish-plugin:0.22.0")
-        classpath("org.jetbrains.dokka:dokka-gradle-plugin:1.7.10")
-        classpath(Dependencies.Shot.core)
+        classpath("com.android.tools.build:gradle:8.1.0-alpha08")
+        //classpath(Dependencies.Shot.core)
     }
 }
 
@@ -48,14 +45,6 @@ tasks.dokkaHtmlMultiModule.configure {
 }
 
 subprojects {
-    plugins.apply("com.diffplug.spotless")
-    spotless {
-        kotlin {
-            target("**/*.kt")
-            ktlint(Dependencies.Ktlint.version)
-        }
-    }
-
     tasks.withType<Test> {
         testLogging {
             showStandardStreams = true

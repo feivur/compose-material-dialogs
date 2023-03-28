@@ -61,7 +61,3 @@ dependencies {
     implementation(Dependencies.Accompanist.pager)
     coreLibraryDesugaring(Dependencies.desugar)
 }
-
-shot {
-    tolerance = 1.0 // Tolerance needed for CI
-}

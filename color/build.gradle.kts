@@ -52,7 +52,3 @@ dependencies {
     api(project(":core"))
     implementation(Dependencies.AndroidX.coreKtx)
 }
-
-shot {
-    tolerance = 1.0 // Tolerance needed for CI
-}

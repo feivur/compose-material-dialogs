@@ -14,9 +14,6 @@ class CommonModulePlugin: Plugin<Project> {
         plugins.run {
             apply("com.android.library")
             apply("kotlin-android")
-            apply("com.vanniktech.maven.publish")
-            apply("shot")
-            apply("org.jetbrains.dokka")
         }
     }
 
@@ -37,7 +34,7 @@ class CommonModulePlugin: Plugin<Project> {
             androidTestImplementation(Dependencies.AndroidX.Testing.rules)
             androidTestImplementation(Dependencies.AndroidX.Testing.runner)
 
-            add("androidTestImplementation", project(":test-utils"))
+            //add("androidTestImplementation", project(":test-utils"))
         }
     }
 

@@ -274,9 +274,11 @@ private fun ClockMinuteLayout(state: TimePickerState) {
 internal fun TimePickerTitle(modifier: Modifier, text: String, state: TimePickerState) {
     Box(modifier) {
         Text(
-            text,
+            text = text,
             modifier = Modifier.paddingFromBaseline(top = 28.dp),
-            style = TextStyle(color = state.colors.headerTextColor())
+            color = state.colors.headerTextColor(),
+            style = TextStyle(fontSize = 14.sp),
+            maxLines = 1
         )
     }
 }

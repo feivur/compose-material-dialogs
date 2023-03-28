@@ -45,7 +45,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight.Companion.W400
+import androidx.compose.ui.text.font.FontWeight.Companion.SemiBold
 import androidx.compose.ui.text.font.FontWeight.Companion.W600
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,11 +56,11 @@ import com.google.accompanist.pager.PagerState
 import com.google.accompanist.pager.rememberPagerState
 import com.vanpra.composematerialdialogs.MaterialDialogScope
 import com.vanpra.composematerialdialogs.datetime.R
-import com.vanpra.composematerialdialogs.datetime.util.getFullLocalName
-import com.vanpra.composematerialdialogs.datetime.util.getShortLocalName
-import com.vanpra.composematerialdialogs.datetime.util.isSmallDevice
+import com.vanpra.composematerialdialogs.datetime.util.getShortFullName
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.time.temporal.WeekFields
 import java.util.Locale
 
@@ -131,7 +131,7 @@ internal fun DatePickerImpl(
             }
 
             Column {
-                CalendarViewHeader(viewDate, state, pagerState, locale)
+                CalendarViewHeader(viewDate, state, pagerState)
                 Box {
                     androidx.compose.animation.AnimatedVisibility(
                         state.yearPickerShowing,
@@ -151,7 +151,6 @@ internal fun DatePickerImpl(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalPagerApi::class)
 @Composable
 private fun YearPicker(
     viewDate: LocalDate,
@@ -219,10 +218,8 @@ private fun CalendarViewHeader(
     viewDate: LocalDate,
     state: DatePickerState,
     pagerState: PagerState,
-    locale: Locale
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val month = remember { viewDate.month.getFullLocalName(locale) }
     val arrowDropUp = painterResource(id = R.drawable.baseline_arrow_drop_up_24)
     val arrowDropDown = painterResource(id = R.drawable.baseline_arrow_drop_down_24)
 
@@ -239,7 +236,7 @@ private fun CalendarViewHeader(
                 .clickable(onClick = { state.yearPickerShowing = !state.yearPickerShowing })
         ) {
             Text(
-                "$month ${viewDate.year}",
+                text = viewDate.year.toString(),
                 modifier = Modifier
                     .paddingFromBaseline(top = 16.dp)
                     .wrapContentSize(Alignment.Center),
@@ -415,36 +412,37 @@ private fun DayOfWeekHeader(state: DatePickerState, locale: Locale) {
 
 @Composable
 private fun CalendarHeader(title: String, state: DatePickerState, locale: Locale) {
-    val month = remember(state.selected) { state.selected.month.getShortLocalName(locale) }
-    val day = remember(state.selected) { state.selected.dayOfWeek.getShortLocalName(locale) }
-
+    val dayOfWeek = remember(state.selected) { state.selected.dayOfWeek.getShortFullName(locale) }
+    val month = remember(state.selected) { state.selected.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)) }
     Box(
         Modifier
             .background(state.colors.headerBackgroundColor)
             .fillMaxWidth()
     ) {
-        Column(Modifier.padding(start = 24.dp, end = 24.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
             Text(
                 text = title,
-                modifier = Modifier.paddingFromBaseline(top = if (isSmallDevice()) 24.dp else 32.dp),
                 color = state.colors.headerTextColor,
-                style = TextStyle(fontSize = 12.sp)
+                style = TextStyle(fontSize = 14.sp),
+                maxLines = 1
             )
 
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .paddingFromBaseline(top = if (isSmallDevice()) 0.dp else 64.dp)
-            ) {
-                Text(
-                    text = "$day, $month ${state.selected.dayOfMonth}",
-                    modifier = Modifier.align(Alignment.CenterStart),
-                    color = state.colors.headerTextColor,
-                    style = TextStyle(fontSize = 30.sp, fontWeight = W400)
-                )
-            }
+            Text(
+                text = dayOfWeek,
+                color = state.colors.headerTextColor,
+                style = TextStyle(fontSize = 26.sp, fontWeight = SemiBold),
+                maxLines = 1
+            )
 
-            Spacer(Modifier.height(if (isSmallDevice()) 8.dp else 16.dp))
+            Text(
+                text = month,
+                color = state.colors.headerTextColor,
+                style = TextStyle(fontSize = 26.sp, fontWeight = SemiBold),
+                maxLines = 1
+            )
         }
     }
 }
