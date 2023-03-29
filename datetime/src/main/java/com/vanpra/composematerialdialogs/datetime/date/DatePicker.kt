@@ -1,5 +1,6 @@
 package com.vanpra.composematerialdialogs.datetime.date
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -29,14 +30,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -58,7 +64,9 @@ import com.vanpra.composematerialdialogs.MaterialDialogScope
 import com.vanpra.composematerialdialogs.datetime.R
 import com.vanpra.composematerialdialogs.datetime.util.getShortFullName
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.temporal.WeekFields
@@ -80,14 +88,13 @@ fun MaterialDialogScope.datepicker(
     initialDate: LocalDate = LocalDate.now(),
     title: String = "SELECT DATE",
     colors: DatePickerColors = DatePickerDefaults.colors(),
-    yearRange: IntRange = IntRange(1900, 2100),
     waitForPositiveButton: Boolean = true,
-    allowedDateValidator: (LocalDate) -> Boolean = { true },
+    allowedDateValidator: ((LocalDate) -> Boolean)? = null,
     locale: Locale = Locale.getDefault(),
-    onDateChange: (LocalDate) -> Unit = {}
+    onDateChange: (LocalDate) -> Unit = {},
 ) {
     val datePickerState = remember {
-        DatePickerState(initialDate, colors, yearRange, dialogState.dialogBackgroundColor!!)
+        DatePickerState(initialDate, colors, dialogState.dialogBackgroundColor!!)
     }
 
     DatePickerImpl(title = title, state = datePickerState, allowedDateValidator, locale)
@@ -107,31 +114,51 @@ fun MaterialDialogScope.datepicker(
 internal fun DatePickerImpl(
     title: String,
     state: DatePickerState,
-    allowedDateValidator: (LocalDate) -> Boolean,
-    locale: Locale
+    allowedDateValidator: ((LocalDate) -> Boolean)? = null,
+    locale: Locale,
 ) {
+    val yearRange: IntRange = remember {
+        val defaultRange = IntRange(1900, 2100)
+        if (allowedDateValidator == null)
+            defaultRange
+        else {
+            val allowedYears = (defaultRange.first..defaultRange.last)
+                .filter { year ->
+                    val y = LocalDate.of(year, 1, 1)
+                    (1..y.lengthOfYear())
+                        .map { y.withDayOfYear(it) }
+                        .any { allowedDateValidator.invoke(it) }
+                }
+                .let { years ->
+                    years.ifEmpty { listOf(LocalDate.now().year) }
+                }
+            IntRange(allowedYears.min(), allowedYears.max())
+        }
+    }
+
     val pagerState = rememberPagerState(
-        initialPage = (state.selected.year - state.yearRange.first) * 12 + state.selected.monthValue - 1
+        initialPage = (state.selected.year - yearRange.first) * 12 + state.selected.monthValue - 1
     )
 
     Column(Modifier.fillMaxWidth()) {
         CalendarHeader(title, state, locale)
         HorizontalPager(
-            count = (state.yearRange.last - state.yearRange.first + 1) * 12,
+            count = (yearRange.last - yearRange.first + 1) * 12,
             state = pagerState,
             verticalAlignment = Alignment.Top,
-            modifier = Modifier.height(336.dp)
+            modifier = Modifier.height(336.dp),
+            userScrollEnabled = false
         ) { page ->
             val viewDate = remember {
                 LocalDate.of(
-                    state.yearRange.first + page / 12,
+                    yearRange.first + page / 12,
                     page % 12 + 1,
                     1
                 )
             }
 
             Column {
-                CalendarViewHeader(viewDate, state, pagerState)
+                CalendarViewHeader(viewDate, state, pagerState, yearRange, allowedDateValidator)
                 Box {
                     androidx.compose.animation.AnimatedVisibility(
                         state.yearPickerShowing,
@@ -141,7 +168,7 @@ internal fun DatePickerImpl(
                         enter = slideInVertically(initialOffsetY = { -it }),
                         exit = slideOutVertically(targetOffsetY = { -it })
                     ) {
-                        YearPicker(viewDate, state, pagerState)
+                        YearPicker(viewDate, state, pagerState, yearRange)
                     }
 
                     CalendarView(viewDate, state, locale, allowedDateValidator)
@@ -155,9 +182,10 @@ internal fun DatePickerImpl(
 private fun YearPicker(
     viewDate: LocalDate,
     state: DatePickerState,
-    pagerState: PagerState
+    pagerState: PagerState,
+    yearRange: IntRange = IntRange(1900, 2100),
 ) {
-    val gridState = rememberLazyGridState(viewDate.year - state.yearRange.first)
+    val gridState = rememberLazyGridState(viewDate.year - yearRange.first)
     val coroutineScope = rememberCoroutineScope()
 
     LazyVerticalGrid(
@@ -165,7 +193,7 @@ private fun YearPicker(
         state = gridState,
         modifier = Modifier.background(state.dialogBackground)
     ) {
-        itemsIndexed(state.yearRange.toList()) { _, item ->
+        itemsIndexed(yearRange.toList()) { _, item ->
             val selected = remember { item == viewDate.year }
             YearPickerItem(year = item, selected = selected, colors = state.colors) {
                 if (!selected) {
@@ -212,20 +240,71 @@ private fun YearPickerItem(
     }
 }
 
+@SuppressLint("SimpleDateFormat")
 @OptIn(ExperimentalPagerApi::class)
 @Composable
 private fun CalendarViewHeader(
     viewDate: LocalDate,
     state: DatePickerState,
     pagerState: PagerState,
+    yearRange: IntRange = IntRange(1900, 2100),
+    allowedDateValidator: ((LocalDate) -> Boolean)? = null,
 ) {
+    val canGoNextPage: (Int) -> Boolean = { delta ->
+        val targetPage = pagerState.currentPage + delta
+        val result = if (allowedDateValidator == null)
+            true
+        else if (delta < 0) {
+            (targetPage downTo 0)
+                .any { months ->
+                    val m = LocalDate.of(yearRange.first + targetPage / 12, months % 12 + 1, 1)
+                    val daysInMonth = YearMonth.of(m.year, m.month).lengthOfMonth()
+                    (daysInMonth downTo 1)
+                        .map { m.withDayOfMonth(it) }
+                        .any {
+                            val result = allowedDateValidator(it)
+                            println("\tfei allowedDateValidator: delta=$delta date=$it = result=$result")
+                            result
+                        }
+                }
+        } else {
+            (targetPage until pagerState.pageCount)
+                .any { months ->
+                    val m = LocalDate.of(yearRange.first + targetPage / 12, months % 12 + 1, 1)
+                    val daysInMonth = YearMonth.of(m.year, m.month).lengthOfMonth()
+                    (1..daysInMonth)
+                        .map { m.withDayOfMonth(it) }
+                        .any {
+                            val result = allowedDateValidator(it)
+                            println("\tfei allowedDateValidator: delta=$delta date=$it = result=$result")
+                            result
+                        }
+                }
+        }
+        //println("fei allowedDateValidator: targetPage=$targetPage result=$result")
+        result
+    }
+
     val coroutineScope = rememberCoroutineScope()
     val arrowDropUp = painterResource(id = R.drawable.baseline_arrow_drop_up_24)
     val arrowDropDown = painterResource(id = R.drawable.baseline_arrow_drop_down_24)
+    val monthName = remember(pagerState.currentPage) {
+        // because of bug in Java we cannot show full stanalone name of month
+        // https://bugs.openjdk.org/browse/JDK-8146356
+        SimpleDateFormat("LLLL").dateFormatSymbols.shortMonths[pagerState.currentPage % 12]
+    }
+
+    var canGoBackward by remember { mutableStateOf(false) }
+    var canGoForward by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pagerState.currentPage) {
+        canGoBackward = canGoNextPage(-1)
+        canGoForward = canGoNextPage(1)
+    }
 
     Box(
         Modifier
-            .padding(top = 16.dp, bottom = 16.dp, start = 24.dp, end = 24.dp)
+            .padding(vertical = 16.dp, horizontal = 24.dp)
             .height(24.dp)
             .fillMaxWidth()
     ) {
@@ -257,45 +336,65 @@ private fun CalendarViewHeader(
         Row(
             Modifier
                 .fillMaxHeight()
-                .align(Alignment.CenterEnd)
+                .align(Alignment.CenterEnd),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Icon(
-                Icons.Default.KeyboardArrowLeft,
-                contentDescription = "Previous Month",
+            Text(
+                text = monthName,
                 modifier = Modifier
-                    .testTag("dialog_date_prev_month")
-                    .size(24.dp)
-                    .clickable(onClick = {
-                        coroutineScope.launch {
-                            if (pagerState.currentPage - 1 >= 0) {
-                                pagerState.animateScrollToPage(
-                                    pagerState.currentPage - 1
-                                )
-                            }
-                        }
-                    }),
-                tint = state.colors.calendarHeaderTextColor
+                    .paddingFromBaseline(top = 16.dp)
+                    .wrapContentSize(Alignment.Center),
+                style = TextStyle(fontSize = 14.sp, fontWeight = W600),
+                color = state.colors.calendarHeaderTextColor
             )
 
-            Spacer(modifier = Modifier.width(24.dp))
-
-            Icon(
-                Icons.Default.KeyboardArrowRight,
-                contentDescription = "Next Month",
+            IconButton(
                 modifier = Modifier
-                    .testTag("dialog_date_next_month")
                     .size(24.dp)
-                    .clickable(onClick = {
-                        coroutineScope.launch {
-                            if (pagerState.currentPage + 1 < pagerState.pageCount) {
-                                pagerState.animateScrollToPage(
-                                    pagerState.currentPage + 1
-                                )
-                            }
+                    .testTag("dialog_date_prev_month"),
+                enabled = canGoBackward,
+                onClick = {
+                    coroutineScope.launch {
+                        if (pagerState.currentPage - 1 >= 0) {
+                            pagerState.animateScrollToPage(
+                                pagerState.currentPage - 1
+                            )
                         }
-                    }),
-                tint = state.colors.calendarHeaderTextColor
-            )
+                    }
+                }
+            ) {
+                Icon(
+                    Icons.Default.KeyboardArrowLeft,
+                    tint = state.colors
+                        .calendarHeaderTextColor
+                        .copy(alpha = if (canGoBackward) ContentAlpha.high else ContentAlpha.disabled),
+                    contentDescription = "Previous Month"
+                )
+            }
+
+            IconButton(
+                modifier = Modifier
+                    .size(24.dp)
+                    .testTag("dialog_date_next_month"),
+                enabled = canGoForward,
+                onClick = {
+                    coroutineScope.launch {
+                        if (pagerState.currentPage + 1 < pagerState.pageCount) {
+                            pagerState.animateScrollToPage(
+                                pagerState.currentPage + 1
+                            )
+                        }
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    tint = state.colors
+                        .calendarHeaderTextColor
+                        .copy(alpha = if (canGoForward) ContentAlpha.high else ContentAlpha.disabled),
+                    contentDescription = "Next Month"
+                )
+            }
         }
     }
 }
@@ -306,7 +405,7 @@ private fun CalendarView(
     viewDate: LocalDate,
     state: DatePickerState,
     locale: Locale,
-    allowedDateValidator: (LocalDate) -> Boolean
+    allowedDateValidator: ((LocalDate) -> Boolean)? = null,
 ) {
     Column(
         Modifier
@@ -330,7 +429,7 @@ private fun CalendarView(
                     possibleSelected && it == state.selected.dayOfMonth
                 }
                 val date = viewDate.withDayOfMonth(it)
-                val enabled = allowedDateValidator(date)
+                val enabled = allowedDateValidator?.invoke(date) ?: true
                 val today = LocalDate.now().atStartOfDay() == date.atStartOfDay()
                 DateSelectionBox(it, selected, today, state.colors, enabled) {
                     state.selected = date
@@ -386,7 +485,9 @@ private fun DateSelectionBox(
 private fun DayOfWeekHeader(state: DatePickerState, locale: Locale) {
     val dayHeaders = WeekFields.of(locale).firstDayOfWeek.let { firstDayOfWeek ->
         (0L until 7L).map {
-            firstDayOfWeek.plus(it).getDisplayName(java.time.format.TextStyle.NARROW, locale)
+            firstDayOfWeek.plus(it)
+                .getDisplayName(java.time.format.TextStyle.NARROW, locale)
+                .uppercase()
         }
     }
 
